@@ -4,7 +4,7 @@ AI-powered expense claim processing for Frappe/ERPNext. Automatically extracts e
 
 ## Demo Video
 
-
+https://github.com/user-attachments/assets/e6fe0cf7-9f9a-45c9-836d-a50048c627b1
 
 ## Features
 
@@ -50,18 +50,6 @@ bench --site your-site install-app ai_expense_claim
 ## Supported Categories
 
 Food • Travel • Accommodation • Fuel • Medical • Communication • Other
-
-## Requirements
-
-- Frappe >= v15
-- ERPNext/HRMS (for Expense Claim DocType)
-- OpenAI API key
-
-## Technical Stack
-
-**Backend:** Python, OpenAI API, pypdf, Pillow  
-**Frontend:** JavaScript, Frappe UI  
-**Architecture:** Multi-threaded processing, server-side grouping
 
 ## API Methods
 
