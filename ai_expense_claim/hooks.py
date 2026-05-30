@@ -43,7 +43,9 @@ app_license = "mit"
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-# doctype_js = {"doctype" : "public/js/doctype.js"}
+doctype_js = {
+    "Expense Claim": "public/js/expense_claim.js"
+}
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -83,7 +85,7 @@ app_license = "mit"
 # ------------
 
 # before_install = "ai_expense_claim.install.before_install"
-# after_install = "ai_expense_claim.install.after_install"
+after_install = "ai_expense_claim.install.after_install"
 
 # Uninstallation
 # ------------
@@ -234,6 +236,30 @@ app_license = "mit"
 # auth_hooks = [
 # 	"ai_expense_claim.auth.validate"
 # ]
+
+fixtures = [
+    {
+        "doctype": "Custom Field",
+        "filters": [
+            ["name", "in", 
+                [
+                    "Expense Claim Detail-custom_attachment",
+                    "Expense Claim-custom_upload_process_aibased_bills",
+                ]
+            ]
+        ]
+    },
+    {
+        "doctype": "Property Setter",
+        "filters": [
+            ["name", "in", [
+                "Expense Claim-main-field_order",
+                "Expense Claim Detail-main-field_order"
+            ]]
+        ]
+    }
+]
+
 
 # Automatically update python controller files with type annotations for this app.
 # export_python_type_annotations = True

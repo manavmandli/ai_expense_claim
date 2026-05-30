@@ -1,33 +1,75 @@
-### Ai Expense Claim
+# AI Expense Claim
 
-Frappe AI Expense Claim
+AI-powered expense claim processing for Frappe/ERPNext. Automatically extracts expense details from receipts and bills using OpenAI.
+
+## Demo Video
+
+
+
+## Features
+
+- 🤖 **AI-Powered Extraction** - Automatically extract date, amount, category, and description from bills
+- 📸 **Multi-Format Support** - PDF, JPG, PNG, WEBP
+- 🔄 **Batch Processing** - Upload and process multiple receipts at once
+- 🎯 **Smart Grouping** - Automatically groups expenses by type and merges attachments
+- ✅ **Quality Control** - Confidence scoring rejects low-quality images
+- 🔒 **Secure** - API keys encrypted in database
+
+## Quick Start
 
 ### Installation
 
-You can install this app using the [bench](https://github.com/frappe/bench) CLI:
-
 ```bash
-cd $PATH_TO_YOUR_BENCH
-bench get-app $URL_OF_THIS_REPO --branch develop
-bench install-app ai_expense_claim
+bench get-app https://github.com/yourusername/ai_expense_claim
+bench --site your-site install-app ai_expense_claim
 ```
 
-### Contributing
+### Configuration
 
-This app uses `pre-commit` for code formatting and linting. Please [install pre-commit](https://pre-commit.com/#installation) and enable it for this repository:
+1. Go to **AI Expense Settings**
+2. Add your **OpenAI API Key**
+3. Select model (default: gpt-4o)
 
-```bash
-cd apps/ai_expense_claim
-pre-commit install
-```
+### Usage
 
-Pre-commit is configured to use the following tools for checking and formatting your code:
+1. Open an **Expense Claim**
+2. Click  → **Upload & Process AI Based Bills**
+3. Upload receipts (drag & drop or click)
+4. Click **Process with AI**
+5. Review and apply extracted expenses
 
-- ruff
-- eslint
-- prettier
-- pyupgrade
+## How It Works
 
-### License
+1. **Upload** - Drop receipt images or PDFs
+2. **Process** - AI extracts expense details in parallel
+3. **Group** - Same expense types are automatically grouped
+4. **Merge** - Multiple receipts merged into single PDF per group
+5. **Review** - Check and edit before applying to expense claim
+6. **Apply** - Selected expenses added to your claim
 
-mit
+## Supported Categories
+
+Food • Travel • Accommodation • Fuel • Medical • Communication • Other
+
+## Requirements
+
+- Frappe >= v15
+- ERPNext/HRMS (for Expense Claim DocType)
+- OpenAI API key
+
+## Technical Stack
+
+**Backend:** Python, OpenAI API, pypdf, Pillow  
+**Frontend:** JavaScript, Frappe UI  
+**Architecture:** Multi-threaded processing, server-side grouping
+
+## API Methods
+
+- `prepare_grouped_expenses` - Process and group bills (main method)
+- `process_bills` - Extract data from individual files
+- `merge_files_for_group` - Merge multiple receipts into PDF
+- `link_files_to_claim` - Attach files to expense claim
+
+## License
+
+MIT

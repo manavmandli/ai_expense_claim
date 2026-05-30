@@ -9,6 +9,10 @@ readme = "README.md"
 dynamic = ["version"]
 dependencies = [
     # "frappe~=15.0.0" # Installed and managed by bench.
+    "openai>=1.0.0",     # OpenAI API client for AI extraction
+    "pypdf>=3.0.0",      # PDF file processing and merging
+    "Pillow>=10.0.0",    # Image processing and conversion
+    "pdf2image>=1.16.0", # PDF to image conversion for multi-page documents
 ]
 
 [build-system]
@@ -21,7 +25,7 @@ build-backend = "flit_core.buildapi"
 
 # These apt dependencies will be installed from Ubuntu repositories when you host your app on Frappe Cloud
 [deploy.dependencies.apt]
-packages = []
+packages = ["poppler-utils"]  # Required by pdf2image for PDF to image conversion
 
 [tool.ruff]
 line-length = 110
