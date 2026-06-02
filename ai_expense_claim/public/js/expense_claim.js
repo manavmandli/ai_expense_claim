@@ -320,7 +320,7 @@ function show_ai_bill_processor(frm) {
 					method: "ai_expense_claim.api.expense.prepare_grouped_expenses",
 					args: { files: JSON.stringify(file_data) },
 					freeze: true,
-					freeze_message: __("AI is processing your bills...")
+					freeze_message: __("Processing Your Bills...")
 				});
 			})
 			.then(r => {

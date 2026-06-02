@@ -28,7 +28,10 @@ bench --site your-site install-app ai_expense_claim
 
 1. Go to **AI Expense Settings**
 2. Add your **OpenAI API Key**
-3. Select model (default: gpt-4o)
+3. Select the AI model (default: GPT-4o) and configure the bill processing limit.
+4. Set the minimum confidence threshold.
+5. Configure the duplicate detection amount tolerance.
+6. Enable or disable private storage for AI processed bill uploads.
 
 ### Usage
 
@@ -51,12 +54,11 @@ bench --site your-site install-app ai_expense_claim
 
 Food • Travel • Accommodation • Fuel • Medical • Communication • Other
 
-## API Methods
+## Requirements
 
-- `prepare_grouped_expenses` - Process and group bills (main method)
-- `process_bills` - Extract data from individual files
-- `merge_files_for_group` - Merge multiple receipts into PDF
-- `link_files_to_claim` - Attach files to expense claim
+- Frappe >= v15
+- ERPNext/HRMS (for Expense Claim DocType)
+- OpenAI API key
 
 ## License
 

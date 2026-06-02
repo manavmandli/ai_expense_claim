@@ -3,7 +3,7 @@ import frappe
 import io
 import os
 from frappe import _
-from frappe.utils import flt, today
+from frappe.utils import flt, today,cint
 from frappe.utils.file_manager import save_file
 from PIL import Image
 from pypdf import PdfReader, PdfWriter
@@ -19,14 +19,16 @@ from ai_expense_claim.api.utils import (
 )
 
 @frappe.whitelist()
-def process_bills(files):
+def process_bills(files, settings=None):
 	files = frappe.parse_json(files)
 	if not files:
 		frappe.throw(_("No files provided."))
 
-	settings = get_ai_expense_settings()
+	if not settings:
+		settings = get_ai_expense_settings()
 	client = get_openai_client(settings)
 	model = settings.openai_model or "gpt-4o"
+	token = settings.max_token or 300
 	expense_types = frappe.get_all("Expense Claim Type", pluck="name")
 	
 	results = []
@@ -37,9 +39,9 @@ def process_bills(files):
 		for idx, f in enumerate(files):
 			mime = f.get("type", "")
 			if mime.startswith("image/"):
-				future = executor.submit(extract_from_image, client, model, f.get("data", ""), expense_types)
+				future = executor.submit(extract_from_image, client, model, token, f.get("data", ""), expense_types)
 			else:
-				future = executor.submit(extract_from_pdf, client, model, decode_file(f), expense_types)
+				future = executor.submit(extract_from_pdf, client, model, token, decode_file(f), expense_types)
 			future_to_file[future] = (idx, f)
 		
 		for future in as_completed(future_to_file):
@@ -56,7 +58,7 @@ def process_bills(files):
 			confidence = info.get("confidence", 0)
 			reason = info.get("reason", "")
 			
-			if confidence < (settings.min_confidence_for_bills or 86):
+			if confidence < (settings.min_confidence_for_bills or 85):
 				low_confidence_files.append({
 					"file": f.get("name", f"File {idx+1}"),
 					"confidence": confidence,
@@ -75,7 +77,7 @@ def process_bills(files):
 					dt=None,
 					dn=None,
 					folder="Home",
-					is_private=0,
+					is_private=cint(settings.upload_ai_processed_bills_as_private_files) or 0,
 				)
 				
 				results.append({
@@ -85,6 +87,7 @@ def process_bills(files):
 					"description": (info.get("description") or "")[:140],
 					"file_doc_name": file_doc.name,
 					"confidence": confidence,
+					"document_type": info.get("document_type", "receipt"),  # bill, upi, payment, receipt
 				})
 			except Exception:
 				frappe.log_error(
@@ -101,9 +104,66 @@ def process_bills(files):
 	return response
 
 
+def calculate_group_amount(items, tolerance=0):
+	if not items:
+		return 0
+	
+	if len(items) == 1:
+		return flt(items[0].get("amount", 0))
+	
+	items_sorted = sorted(items, key=lambda x: flt(x.get("amount", 0)))
+	processed = set()
+	total_amount = 0
+	
+	for i, item in enumerate(items_sorted):
+		if i in processed:
+			continue
+		
+		item_amount = flt(item.get("amount", 0))
+		item_doc_type = (item.get("document_type") or "receipt").lower()
+		
+		# Check if this item is a duplicate of any other item
+		is_duplicate = False
+		
+		for j, other in enumerate(items_sorted):
+			if j <= i or j in processed:
+				continue
+			
+			other_amount = flt(other.get("amount", 0))
+			other_doc_type = (other.get("document_type") or "receipt").lower()
+			
+			amount_diff = abs(item_amount - other_amount)
+			
+			if amount_diff <= tolerance:
+				payment_types = {"upi", "payment"}
+				bill_types = {"bill", "receipt"}
+				
+				is_payment_bill_pair = (
+					(item_doc_type in payment_types and other_doc_type in bill_types) or
+					(item_doc_type in bill_types and other_doc_type in payment_types)
+				)
+				
+				if is_payment_bill_pair:
+					is_duplicate = True
+					processed.add(j)
+					# Use the bill amount if available, otherwise use payment amount
+					if item_doc_type in bill_types:
+						total_amount += item_amount
+					else:
+						total_amount += other_amount
+					break
+		
+		if not is_duplicate:
+			total_amount += item_amount
+			processed.add(i)
+	
+	return total_amount
+
+
 @frappe.whitelist()
 def prepare_grouped_expenses(files):
-	response = process_bills(files)
+	settings = get_ai_expense_settings()
+	response = process_bills(files,settings)
 	results = response.get("results", [])
 	low_confidence_files = response.get("low_confidence_files", [])
 	
@@ -118,7 +178,7 @@ def prepare_grouped_expenses(files):
 	group_map = defaultdict(lambda: {
 		"expense_type": "",
 		"expense_date": "",
-		"amount": 0,
+		"items": [],  # Store all items to detect duplicates
 		"descriptions": [],
 		"file_doc_names": [],
 		"confidences": [],
@@ -136,7 +196,8 @@ def prepare_grouped_expenses(files):
 			g["expense_type"] = item_type
 			g["expense_date"] = item_date
 		
-		g["amount"] += flt(item.get("amount", 0))
+		# Store the full item for duplicate detection later
+		g["items"].append(item)
 		
 		desc = item.get("description", "").strip()
 		if desc and desc not in g["descriptions"]:
@@ -150,14 +211,18 @@ def prepare_grouped_expenses(files):
 		if file_name:
 			g["file_doc_names"].append(file_name)
 	
-	# Merge attachments for each group
 	groups = []
 	for key, g in group_map.items():
 		avg_confidence = sum(g["confidences"]) / len(g["confidences"]) if g["confidences"] else 95.0
 		
+		# Calculate amount with duplicate (one bill + one payment) handling
+		tolerance = flt(settings.duplicate_detection_amount_tolerance) if settings else 0
+		final_amount = calculate_group_amount(g["items"], tolerance)
+		
 		if g["file_doc_names"]:
 			try:
-				g["attachment_url"] = merge_files_for_group(g["file_doc_names"]) or ""
+				is_private = cint(settings.upload_ai_processed_bills_as_private_files) or 0
+				g["attachment_url"] = merge_files_for_group(g["file_doc_names"],is_private) or ""
 			except Exception:
 				frappe.log_error(
 					title="Group Attachment Merge Error",
@@ -169,7 +234,7 @@ def prepare_grouped_expenses(files):
 			"expense_type": g["expense_type"],
 			"expense_date": g["expense_date"],
 			"avg_confidence": round(avg_confidence, 1),
-			"amount": flt(g["amount"], 2),
+			"amount": flt(final_amount, 2),
 			"description": "; ".join(g["descriptions"])[:140],
 			"attachment_url": g["attachment_url"],
 			"file_doc_names": g["file_doc_names"]
@@ -201,7 +266,7 @@ def link_files_to_claim(file_doc_names, docname):
 				)
 
 @frappe.whitelist()
-def merge_files_for_group(file_doc_names):
+def merge_files_for_group(file_doc_names, is_private=0):
 	if isinstance(file_doc_names, str):
 		file_doc_names = frappe.parse_json(file_doc_names)
 
@@ -248,7 +313,7 @@ def merge_files_for_group(file_doc_names):
 		dt=None,
 		dn=None,
 		folder="Home",
-		is_private=0,
+		is_private=is_private,
 	)
 	return merged.file_url
 

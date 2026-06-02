@@ -7,13 +7,34 @@ from openai import OpenAI
 from pypdf import PdfReader
 from pdf2image import convert_from_bytes
 
-EXTRACT_PROMPT_TEMPLATE = """Extract expense data from this receipt/bill. Return ONLY this JSON, no markdown:
-{{"date":"YYYY-MM-DD","category":"{categories}","amount":number,"description":"vendor+purpose (max 60 chars)","confidence":0-100,"reason":"only if confidence<75"}}
+EXTRACT_PROMPT_TEMPLATE = """Extract expense information from this document and return ONLY valid JSON:
 
-AMOUNT: Grand total/total payable only. Never use tax, GST, IGST, CGST, or subtotal.
-DATE: Travel tickets → departure date (not booking date). 4-digit year only; "25"→"2025", year must be 2022-2027.
-CATEGORY: Pick exactly one from the list; last option if unsure.
-CONFIDENCE: 90+=clearly readable; 75-89=minor issues; <75=major data missing. Extract if readable, null only if truly unreadable."""
+{{"date":"YYYY-MM-DD","category":"{categories}","amount":0,"description":"vendor+purpose","confidence":100,"reason":"","document_type":"bill|receipt|upi|payment|ticket"}}
+
+Rules:
+
+* Document may be in any language.
+* Date: Use the value from the Date/Invoice Date/Bill Date field. Never extract a date from Bill No, Invoice No, Receipt No, Reference No, Order ID, Transaction ID, PNR, or Ticket No. For travel tickets use departure/journey date.
+* Amount: Use final paid/grand total only. Ignore GST, CGST, SGST, IGST, tax, service charges, and subtotals.
+* Category: Must be exactly one of {categories}. Use the last category if uncertain.
+* Description: Short vendor + purpose (max 60 chars).
+* Document type:
+
+  * bill = invoice/itemized bill
+  * receipt = simple receipt
+  * upi = UPI payment screenshot
+  * payment = bank/card payment confirmation
+  * ticket = travel ticket
+* Confidence reflects extraction quality:
+
+  * 90-100: amount and date clearly identified
+  * 75-89: minor ambiguity
+  * below 75: important information unclear
+* Set reason only when confidence < 75.
+* Extract best available values. Use null only when truly unreadable.
+* Return JSON only.
+  """
+
 
 def build_prompt(expense_types):
 	if not expense_types:
@@ -45,7 +66,7 @@ def parse_ai_json(content):
 	except json.JSONDecodeError:
 		return None
 
-def extract_from_image(client, model, data_url, expense_types=None):
+def extract_from_image(client, model, token, data_url, expense_types=None):
 	prompt = build_prompt(expense_types)
 	try:
 		response = client.chat.completions.create(
@@ -57,7 +78,7 @@ def extract_from_image(client, model, data_url, expense_types=None):
 					{"type": "image_url", "image_url": {"url": data_url, "detail": "high"}},
 				],
 			}],
-			max_tokens=400,
+			max_tokens=token,
 		)
 		return parse_ai_json(response.choices[0].message.content) or {}
 	except Exception:
@@ -68,7 +89,7 @@ def extract_from_image(client, model, data_url, expense_types=None):
 		return {}
 
 
-def extract_from_pdf(client, model, data_bytes, expense_types=None):
+def extract_from_pdf(client, model, token, data_bytes, expense_types=None):
 	prompt = build_prompt(expense_types)
 	try:
 		reader = PdfReader(io.BytesIO(data_bytes))
@@ -82,14 +103,14 @@ def extract_from_pdf(client, model, data_bytes, expense_types=None):
 			response = client.chat.completions.create(
 				model=model,
 				messages=[{"role": "user", "content": full_prompt}],
-				max_tokens=400,
+				max_tokens=token,
 			)
 			result = parse_ai_json(response.choices[0].message.content)
 			if result and result.get("amount"):
 				return result
 		
 		# Fall back to image mode if text extraction produced no usable result
-		return extract_pdf_as_images(client, model, data_bytes, prompt)
+		return extract_pdf_as_images(client, model, token, data_bytes, prompt)
 		
 	except Exception:
 		frappe.log_error(
@@ -99,7 +120,7 @@ def extract_from_pdf(client, model, data_bytes, expense_types=None):
 		return {}
 
 
-def extract_pdf_as_images(client, model, data_bytes, prompt):
+def extract_pdf_as_images(client, model, token, data_bytes, prompt):
 	try:
 		images = convert_from_bytes(data_bytes, dpi=100, fmt='jpeg')[:4]  # Max 4 pages
 		
@@ -128,7 +149,7 @@ Page 1 has priority — ignore GST breakdowns, terms, and ads on later pages.
 		response = client.chat.completions.create(
 			model=model,
 			messages=[{"role": "user", "content": content}],
-			max_tokens=400,
+			max_tokens=token,
 		)
 		return parse_ai_json(response.choices[0].message.content) or {}
 	except Exception:

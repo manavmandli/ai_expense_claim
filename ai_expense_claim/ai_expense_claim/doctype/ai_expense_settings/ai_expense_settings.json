@@ -8,8 +8,13 @@
   "openai_config_section",
   "openai_api_key",
   "openai_model",
-  "column_break_nfqv",
-  "min_confidence_for_bills"
+  "column_break_aoys",
+  "max_token",
+  "section_break_lnco",
+  "min_confidence_for_bills",
+  "duplicate_detection_amount_tolerance",
+  "column_break_yusl",
+  "upload_ai_processed_bills_as_private_files"
  ],
  "fields": [
   {
@@ -34,20 +39,56 @@
    "label": "OpenAI Config"
   },
   {
-   "fieldname": "column_break_nfqv",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "86",
+   "default": "85",
+   "description": "Minimum AI confidence required for automatic bill processing.",
    "fieldname": "min_confidence_for_bills",
    "fieldtype": "Int",
    "label": "Min Confidence for Bills",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_break_lnco",
+   "fieldtype": "Section Break",
+   "label": "Expense Config"
+  },
+  {
+   "default": "0",
+   "description": "Maximum amount difference allowed to match a bill and payment as the same expense.",
+   "fieldname": "duplicate_detection_amount_tolerance",
+   "fieldtype": "Float",
+   "label": "Duplicate Detection Amount Tolerance",
+   "non_negative": 1,
+   "precision": "2",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "When enabled, files uploaded during AI bill processing will be stored as private attachments.",
+   "fieldname": "upload_ai_processed_bills_as_private_files",
+   "fieldtype": "Check",
+   "label": "Upload AI Processed Bills as Private Files"
+  },
+  {
+   "fieldname": "column_break_aoys",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_yusl",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "300",
+   "description": "Maximum tokens allowed for AI bill processing.",
+   "fieldname": "max_token",
+   "fieldtype": "Int",
+   "label": "Max Token",
+   "non_negative": 1,
    "reqd": 1
   }
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-05-30 14:06:07.495616",
+ "modified": "2026-06-03 00:09:52.923250",
  "modified_by": "Administrator",
  "module": "Ai Expense Claim",
  "name": "AI Expense Settings",
