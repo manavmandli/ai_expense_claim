@@ -12,9 +12,11 @@
   "max_token",
   "section_break_lnco",
   "min_confidence_for_bills",
+  "upload_ai_processed_bills_as_private_files",
+  "column_break_lbth",
+  "merge_payment_proofs_with_bills",
   "duplicate_detection_amount_tolerance",
-  "column_break_yusl",
-  "upload_ai_processed_bills_as_private_files"
+  "group_same_date_same_type_expenses"
  ],
  "fields": [
   {
@@ -53,13 +55,13 @@
   },
   {
    "default": "0",
-   "description": "Maximum amount difference allowed to match a bill and payment as the same expense.",
+   "depends_on": "eval:doc.merge_payment_proofs_with_bills == 1",
    "fieldname": "duplicate_detection_amount_tolerance",
    "fieldtype": "Float",
    "label": "Duplicate Detection Amount Tolerance",
+   "mandatory_depends_on": "eval:doc.merge_payment_proofs_with_bills == 1",
    "non_negative": 1,
-   "precision": "2",
-   "reqd": 1
+   "precision": "2"
   },
   {
    "default": "0",
@@ -73,10 +75,6 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "column_break_yusl",
-   "fieldtype": "Column Break"
-  },
-  {
    "default": "300",
    "description": "Maximum tokens allowed for AI bill processing.",
    "fieldname": "max_token",
@@ -84,11 +82,29 @@
    "label": "Max Token",
    "non_negative": 1,
    "reqd": 1
+  },
+  {
+   "fieldname": "column_break_lbth",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "Automatically merge UPI/payment screenshots with matching bills when amount difference is within tolerance.",
+   "fieldname": "merge_payment_proofs_with_bills",
+   "fieldtype": "Check",
+   "label": "Merge Payment Proofs with Bills"
+  },
+  {
+   "default": "0",
+   "description": "Automatically consolidate expenses having the same date and expense type into a single entry.",
+   "fieldname": "group_same_date_same_type_expenses",
+   "fieldtype": "Check",
+   "label": "Group Same Date & Expense Type Entries"
   }
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-06-03 00:09:52.923250",
+ "modified": "2026-06-16 01:36:27.675148",
  "modified_by": "Administrator",
  "module": "Ai Expense Claim",
  "name": "AI Expense Settings",

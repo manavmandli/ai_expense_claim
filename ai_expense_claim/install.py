@@ -36,22 +36,12 @@ def create_default_expense_claim_types():
 	
 	for expense_type_data in default_types:
 		if not frappe.db.exists("Expense Claim Type", expense_type_data["name"]):
-			try:
-				doc = frappe.get_doc({
-					"doctype": "Expense Claim Type",
-					"name": expense_type_data["name"],
-					"expense_type": expense_type_data["expense_type"],
-					"description": expense_type_data.get("description", "")
-				})
-				doc.insert(ignore_permissions=True)
-			except Exception:
-				frappe.log_error(
-					title="Error Creating Default Expense Claim Type",
-					message=f"Failed to create {expense_type_data['name']}: {frappe.get_traceback()}"
-				)
+			doc = frappe.get_doc({
+				"doctype": "Expense Claim Type",
+				"name": expense_type_data["name"],
+				"expense_type": expense_type_data["expense_type"],
+				"description": expense_type_data.get("description", "")
+			})
+			doc.insert(ignore_permissions=True)
 	
-	frappe.msgprint(
-		msg=_("Default Expense Claim Types created successfully"),
-		title=_("Installation Complete"),
-		indicator="green"
-	)
+

@@ -11,21 +11,28 @@ from ai_expense_claim.integration.openai import (
 	get_openai_client,
 	extract_from_image,
 	extract_from_pdf
+
 )
 from ai_expense_claim.api.utils import (
 	decode_file,
 	match_expense_type,
-	get_ai_expense_settings
+	get_ai_expense_settings,
+	calculate_group_amount,
+	create_individual_groups,
+	merge_payment_proof_groups,
+	consolidate_same_type_groups
 )
 
 @frappe.whitelist()
 def process_bills(files, settings=None):
+
 	files = frappe.parse_json(files)
 	if not files:
 		frappe.throw(_("No files provided."))
 
 	if not settings:
 		settings = get_ai_expense_settings()
+
 	client = get_openai_client(settings)
 	model = settings.openai_model or "gpt-4o"
 	token = settings.max_token or 300
@@ -46,6 +53,7 @@ def process_bills(files, settings=None):
 		
 		for future in as_completed(future_to_file):
 			idx, f = future_to_file[future]
+
 			try:
 				info = future.result() or {}
 			except Exception:
@@ -89,6 +97,7 @@ def process_bills(files, settings=None):
 					"confidence": confidence,
 					"document_type": info.get("document_type", "receipt"),  # bill, upi, payment, receipt
 				})
+
 			except Exception:
 				frappe.log_error(
 					title="File Save Error",
@@ -96,6 +105,7 @@ def process_bills(files, settings=None):
 				)
 	
 	results.sort(key=lambda x: (x["expense_date"], x["expense_type"]))
+
 	response = {
 		"results": results,
 		"low_confidence_files": low_confidence_files
@@ -103,151 +113,58 @@ def process_bills(files, settings=None):
 	
 	return response
 
-
-def calculate_group_amount(items, tolerance=0):
-	if not items:
-		return 0
-	
-	if len(items) == 1:
-		return flt(items[0].get("amount", 0))
-	
-	items_sorted = sorted(items, key=lambda x: flt(x.get("amount", 0)))
-	processed = set()
-	total_amount = 0
-	
-	for i, item in enumerate(items_sorted):
-		if i in processed:
-			continue
-		
-		item_amount = flt(item.get("amount", 0))
-		item_doc_type = (item.get("document_type") or "receipt").lower()
-		
-		# Check if this item is a duplicate of any other item
-		is_duplicate = False
-		
-		for j, other in enumerate(items_sorted):
-			if j <= i or j in processed:
-				continue
-			
-			other_amount = flt(other.get("amount", 0))
-			other_doc_type = (other.get("document_type") or "receipt").lower()
-			
-			amount_diff = abs(item_amount - other_amount)
-			
-			if amount_diff <= tolerance:
-				payment_types = {"upi", "payment"}
-				bill_types = {"bill", "receipt"}
-				
-				is_payment_bill_pair = (
-					(item_doc_type in payment_types and other_doc_type in bill_types) or
-					(item_doc_type in bill_types and other_doc_type in payment_types)
-				)
-				
-				if is_payment_bill_pair:
-					is_duplicate = True
-					processed.add(j)
-					# Use the bill amount if available, otherwise use payment amount
-					if item_doc_type in bill_types:
-						total_amount += item_amount
-					else:
-						total_amount += other_amount
-					break
-		
-		if not is_duplicate:
-			total_amount += item_amount
-			processed.add(i)
-	
-	return total_amount
-
-
 @frappe.whitelist()
 def prepare_grouped_expenses(files):
 	settings = get_ai_expense_settings()
-	response = process_bills(files,settings)
+	response = process_bills(files, settings)
+
 	results = response.get("results", [])
 	low_confidence_files = response.get("low_confidence_files", [])
-	
+
 	if not results:
 		return {
 			"groups": [],
 			"low_confidence_files": low_confidence_files
 		}
-	
-	# Group by BOTH expense_date AND expense_type
-	from collections import defaultdict
-	group_map = defaultdict(lambda: {
-		"expense_type": "",
-		"expense_date": "",
-		"items": [],  # Store all items to detect duplicates
-		"descriptions": [],
-		"file_doc_names": [],
-		"confidences": [],
-		"attachment_url": ""
-	})
-	
-	for item in results:
-		item_date = item.get("expense_date") or ""
-		item_type = item.get("expense_type") or ""
-		key = (item_date, item_type)
-		
-		g = group_map[key]
-		
-		if not g["expense_type"]:
-			g["expense_type"] = item_type
-			g["expense_date"] = item_date
-		
-		# Store the full item for duplicate detection later
-		g["items"].append(item)
-		
-		desc = item.get("description", "").strip()
-		if desc and desc not in g["descriptions"]:
-			g["descriptions"].append(desc)
-		
-		confidence = item.get("confidence", 0)
-		if confidence:
-			g["confidences"].append(confidence)
-		
-		file_name = item.get("file_doc_name")
-		if file_name:
-			g["file_doc_names"].append(file_name)
-	
-	groups = []
-	for key, g in group_map.items():
-		avg_confidence = sum(g["confidences"]) / len(g["confidences"]) if g["confidences"] else 95.0
-		
-		# Calculate amount with duplicate (one bill + one payment) handling
-		tolerance = flt(settings.duplicate_detection_amount_tolerance) if settings else 0
-		final_amount = calculate_group_amount(g["items"], tolerance)
-		
-		if g["file_doc_names"]:
-			try:
-				is_private = cint(settings.upload_ai_processed_bills_as_private_files) or 0
-				g["attachment_url"] = merge_files_for_group(g["file_doc_names"],is_private) or ""
-			except Exception:
-				frappe.log_error(
-					title="Group Attachment Merge Error",
-					message=frappe.get_traceback()
-				)
-				g["attachment_url"] = ""
-		
-		groups.append({
-			"expense_type": g["expense_type"],
-			"expense_date": g["expense_date"],
-			"avg_confidence": round(avg_confidence, 1),
-			"amount": flt(final_amount, 2),
-			"description": "; ".join(g["descriptions"])[:140],
-			"attachment_url": g["attachment_url"],
-			"file_doc_names": g["file_doc_names"]
-		})
-	
-	# Sort by date and type (oldest date first, empty dates at the end)
-	groups.sort(key=lambda x: (x["expense_date"] or "9999-12-31", x["expense_type"] or ""))
-	
+
+	results.sort(
+		key=lambda x: flt(x.get("confidence", 0)),
+		reverse=True
+	)
+
+	tolerance = 0
+	if cint(settings.merge_payment_proofs_with_bills):
+
+		tolerance = flt(
+			settings.duplicate_detection_amount_tolerance
+		)
+
+	# Case 1: Always create isolated groups
+	grouped_items = create_individual_groups(results)
+
+	# Case 2: Merge payment proofs
+	if cint(settings.merge_payment_proofs_with_bills):
+		grouped_items = merge_payment_proof_groups(
+			grouped_items,
+			tolerance
+		)
+
+	# Case 3: Consolidate same date + type
+	if cint(settings.group_same_date_same_type_expenses):
+		grouped_items = consolidate_same_type_groups(
+			grouped_items
+		)
+
+	groups = build_final_groups(
+		grouped_items,
+		settings,
+		tolerance
+	)
+
 	return {
 		"groups": groups,
 		"low_confidence_files": low_confidence_files
 	}
-
 
 @frappe.whitelist()
 def link_files_to_claim(file_doc_names, docname):
@@ -330,4 +247,54 @@ def merge_attachments_by_url(url1, url2):
 
 	return merge_files_for_group(names)
 
+def build_final_groups(grouped_items, settings, tolerance):
+	groups = []
+	for g in grouped_items:
+		avg_confidence = (
+			sum(g["confidences"]) / len(g["confidences"])
+			if g["confidences"]
+			else 95.0
+		)
+
+		final_amount = calculate_group_amount(
+			g["items"],
+			tolerance
+		)
+
+		attachment_url = ""
+		if g["file_doc_names"]:
+			try:
+				is_private = cint(
+					settings.upload_ai_processed_bills_as_private_files
+				) or 0
+
+				attachment_url = merge_files_for_group(
+					g["file_doc_names"],
+					is_private
+				) or ""
+				
+			except Exception:
+				frappe.log_error(
+					title="Group Attachment Merge Error",
+					message=frappe.get_traceback()
+				)
+
+		groups.append({
+			"expense_type": g["expense_type"],
+			"expense_date": g["expense_date"],
+			"avg_confidence": round(avg_confidence, 1),
+			"amount": flt(final_amount, 2),
+			"description": "; ".join(g["descriptions"])[:140],
+			"attachment_url": attachment_url,
+			"file_doc_names": g["file_doc_names"]
+		})
+
+	groups.sort(
+		key=lambda x: (
+			x["expense_date"] or "9999-12-31",
+			x["expense_type"] or ""
+		)
+	)
+
+	return groups
 

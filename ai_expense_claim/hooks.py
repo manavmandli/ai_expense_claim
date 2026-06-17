@@ -26,7 +26,7 @@ app_license = "mit"
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/ai_expense_claim/css/ai_expense_claim.css"
-# app_include_js = "/assets/ai_expense_claim/js/ai_expense_claim.js"
+app_include_js = "ai_bill_processor.bundle.js"
 
 # include js, css files in header of web template
 # web_include_css = "/assets/ai_expense_claim/css/ai_expense_claim.css"

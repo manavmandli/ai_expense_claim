@@ -3,6 +3,7 @@ import json
 import base64
 import frappe
 from frappe import _
+from datetime import date
 from openai import OpenAI
 from pypdf import PdfReader
 from pdf2image import convert_from_bytes
@@ -14,7 +15,7 @@ EXTRACT_PROMPT_TEMPLATE = """Extract expense information from this document and 
 Rules:
 
 * Document may be in any language.
-* Date: Use the value from the Date/Invoice Date/Bill Date field. Never extract a date from Bill No, Invoice No, Receipt No, Reference No, Order ID, Transaction ID, PNR, or Ticket No. For travel tickets use departure/journey date.
+* Date: Use the value from the Date/Invoice Date/Bill Date field. Never extract a date from Bill No, Invoice No, Receipt No, Reference No, Order ID, Transaction ID, PNR, or Ticket No. For travel tickets use departure/journey date. If the document shows only a day and month with no year (e.g. "23 May"), always use {current_year} as the year.
 * Amount: Use final paid/grand total only. Ignore GST, CGST, SGST, IGST, tax, service charges, and subtotals.
 * Category: Must be exactly one of {categories}. Use the last category if uncertain.
 * Description: Short vendor + purpose (max 60 chars).
@@ -35,13 +36,13 @@ Rules:
 * Return JSON only.
   """
 
-
 def build_prompt(expense_types):
-	if not expense_types:
-		expense_types = ["Other"]
-	
-	categories = "|".join(expense_types)
-	return EXTRACT_PROMPT_TEMPLATE.format(categories=categories)
+    if not expense_types:
+        expense_types = ["Other"]
+    
+    categories = "|".join(expense_types)
+    current_year = date.today().year
+    return EXTRACT_PROMPT_TEMPLATE.format(categories=categories, current_year=current_year)
 
 def get_openai_client(settings):
 	api_key = settings.get_password("openai_api_key")
@@ -68,6 +69,7 @@ def parse_ai_json(content):
 
 def extract_from_image(client, model, token, data_url, expense_types=None):
 	prompt = build_prompt(expense_types)
+	
 	try:
 		response = client.chat.completions.create(
 			model=model,
@@ -99,12 +101,14 @@ def extract_from_pdf(client, model, token, data_bytes, expense_types=None):
 		text = "\n".join(page.extract_text() or "" for page in content_pages).strip()
 		
 		if text and len(text) < 12000:
+
 			full_prompt = f"{prompt}\n\nDocument text (first pages only):\n{text}"
 			response = client.chat.completions.create(
 				model=model,
 				messages=[{"role": "user", "content": full_prompt}],
 				max_tokens=token,
 			)
+
 			result = parse_ai_json(response.choices[0].message.content)
 			if result and result.get("amount"):
 				return result
@@ -146,12 +150,15 @@ Page 1 has priority — ignore GST breakdowns, terms, and ads on later pages.
 				"type": "image_url",
 				"image_url": {"url": data_url, "detail": detail_level}
 			})
+
 		response = client.chat.completions.create(
 			model=model,
 			messages=[{"role": "user", "content": content}],
 			max_tokens=token,
 		)
+
 		return parse_ai_json(response.choices[0].message.content) or {}
+	
 	except Exception:
 		frappe.log_error(
 			title="PDF to Image Extraction Error",
