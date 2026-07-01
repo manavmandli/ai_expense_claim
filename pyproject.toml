@@ -8,7 +8,6 @@ requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]
 dependencies = [
-    "frappe~=15.0.0",    # Installed and managed by bench.
     "openai>=1.0.0",     # OpenAI API client for AI extraction
     "pypdf>=3.0.0",      # PDF file processing and merging
     "Pillow>=10.0.0",    # Image processing and conversion
