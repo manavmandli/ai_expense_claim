@@ -1,57 +1,46 @@
 <template>
 	<div class="ai-bill-processor-wrapper">
-		<template v-if="!crop_target">
-			<div
-				class="ai-dropzone"
-				:class="{ dragover: is_dragging }"
-				@dragover.prevent="is_dragging = true"
-				@dragleave.prevent="is_dragging = false"
-				@drop.prevent="on_drop"
-				@click="$refs.file_input.click()"
-			>
-				<input
-					ref="file_input"
-					type="file"
-					class="hidden"
-					multiple
-					accept="image/*,.pdf"
-					@change="on_file_input"
-				/>
-				<div class="ai-drop-icon" v-html="frappe.utils.icon('upload', 'xl')"></div>
-				<p class="ai-drop-label">{{ __("Click or drop files here") }}</p>
-				<p class="ai-drop-hint">{{ __("Supports PDF and images (JPG, PNG, WEBP)") }}</p>
+		<div
+			class="ai-dropzone"
+			:class="{ dragover: is_dragging }"
+			@dragover.prevent="is_dragging = true"
+			@dragleave.prevent="is_dragging = false"
+			@drop.prevent="on_drop"
+			@click="$refs.file_input.click()"
+		>
+			<input
+				ref="file_input"
+				type="file"
+				class="hidden"
+				multiple
+				accept="image/*,.pdf"
+				@change="on_file_input"
+			/>
+			<div class="ai-drop-icon" v-html="frappe.utils.icon('upload', 'xl')"></div>
+			<p class="ai-drop-label">{{ __("Click or drop files here") }}</p>
+			<p class="ai-drop-hint">{{ __("Supports PDF and images (JPG, PNG, WEBP)") }}</p>
+		</div>
+
+		<template v-if="files.length">
+			<div class="ai-list-header">
+				<span>{{ __("Files to process") }}</span>
+				<span class="badge badge-pill badge-primary">{{ files.length }}</span>
 			</div>
-
-			<template v-if="files.length">
-				<div class="ai-list-header">
-					<span>{{ __("Files to process") }}</span>
-					<span class="badge badge-pill badge-primary">{{ files.length }}</span>
-				</div>
-				<div ref="sortable_el" class="ai-file-list">
-					<AIBillFileItem
-						v-for="file in files"
-						:key="file.id"
-						:file="file"
-						@remove="remove_file(file.id)"
-						@crop="open_cropper(file)"
-					/>
-				</div>
-			</template>
+			<div ref="sortable_el" class="ai-file-list">
+				<AIBillFileItem
+					v-for="file in files"
+					:key="file.id"
+					:file="file"
+					@remove="remove_file(file.id)"
+				/>
+			</div>
 		</template>
-
-		<ImageCropper
-			v-else
-			:file="crop_target"
-			:fixed_aspect_ratio="null"
-			@toggle_image_cropper="close_cropper"
-		/>
 	</div>
 </template>
 
 <script setup>
 import { ref, nextTick } from "vue";
 import AIBillFileItem from "./AIBillFileItem.vue";
-import ImageCropper from "../../../../../frappe/frappe/public/js/frappe/file_uploader/ImageCropper.vue";
 
 const props = defineProps({
 	frm: { required: true }
@@ -61,7 +50,6 @@ const file_input = ref(null);
 const sortable_el = ref(null);
 const files = ref([]);
 const is_dragging = ref(false);
-const crop_target = ref(null);
 
 let id_seq = 0;
 let sortable = null;
@@ -113,8 +101,6 @@ function add_files(file_list) {
 			const item = {
 				id: ++id_seq,
 				file_obj: f,
-				cropper_file: f,
-				crop_box_data: null,
 				name: f.name,
 				type: f.type,
 				size: f.size,
@@ -139,22 +125,6 @@ function remove_file(id) {
 	if (!files.value.length) {
 		sortable?.destroy();
 		sortable = null;
-	}
-}
-
-function open_cropper(file) {
-	crop_target.value = file;
-}
-
-function close_cropper() {
-	const file = crop_target.value;
-	crop_target.value = null;
-	
-	// Update preview after cropping
-	if (file && file.file_obj.type.startsWith("image/")) {
-		const reader = new FileReader();
-		reader.onload = (e) => (file.preview = e.target.result);
-		reader.readAsDataURL(file.file_obj);
 	}
 }
 

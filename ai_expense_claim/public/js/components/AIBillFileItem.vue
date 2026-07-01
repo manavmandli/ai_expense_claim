@@ -24,14 +24,8 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
-
 const props = defineProps({ file: Object });
-const emit = defineEmits(["remove", "crop"]);
-
-const is_cropable = computed(() => {
-	return props.file.type && props.file.type.startsWith("image/");
-});
+const emit = defineEmits(["remove"]);
 
 function fmt_size(bytes) {
 	if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + " MB";
